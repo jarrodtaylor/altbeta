@@ -42,7 +42,7 @@ struct CLI: ParsableCommand {
     Project.build()
     
     if let port = port {
-//      Watcher(Project.source!)
+      Watcher(Project.source!)
       Server(path: Project.target!.masked, port: port)
       
       log("^c to stop")
