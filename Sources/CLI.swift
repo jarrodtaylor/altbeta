@@ -43,7 +43,8 @@ struct CLI: ParsableCommand {
     
     if let port = port {
 //      Watcher(Project.source!)
-//      Server(path: Project.target!.masked, port: port)
+      Server(path: Project.target!.masked, port: port)
+      
       log("^c to stop")
       RunLoop.current.run()
     }
