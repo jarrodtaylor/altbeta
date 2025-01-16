@@ -6,10 +6,19 @@ struct File {
   
   var isModified: Bool {
     get throws {
-      return true
+      guard target.exists,
+        let sourceModDate = try source.modificationDate,
+        let targetModDate = try target.modificationDate,
+        targetModDate > sourceModDate
+      else { return true }
+      for dependency in try source.dependencies {
+        if let dependencyModDate = try dependency.source.modificationDate,
+          dependencyModDate > targetModDate
+        { return true } }
+      return false
     }
   }
-  
+
   var ref: String {
     source
       .path(percentEncoded: false)
@@ -63,6 +72,67 @@ struct File {
   
   func render(_ context: [String: String] = [:]) throws -> String {
     var (context, text) = (context, try source.contents)
+
+    for (key, val) in try source.context {
+      guard !context.keys.contains(key) || context["#isIncluding"] != "true"
+      else {
+        continue
+      }
+      
+      context[key] = val
+    }
+    
+    if context["#forceLayout"] == "true" || context["#isIncluding"] != "true",
+       let layoutRef = context["#layout"],
+       let layoutFile = Project.file(layoutRef)
+    {
+      let macro = Layout(template: layoutFile, content: text)
+      
+      for (key, val) in try macro.context {
+        if context[key] == nil {
+          context[key] = val
+        }
+      }
+      
+      text = try macro.render()
+    }
+    
+    for match in text.find(Include.pattern) {
+      let macro = Include(fragment: match)
+
+      if macro.file?.source.exists == true {
+        var params = macro.parameters
+        
+        for (key, val) in params {
+          if let v = context[val] {
+            params[key] = v
+          }
+        }
+        
+        params["#isIncluding"] = "true"
+        
+        text = text.replacingFirstOccurrence(
+          of: match,
+          with: try macro.file!.render(params))
+      }
+    }
+    
+    for match in text.find(Variable.pattern) {
+      let macro = Variable(fragment: match)
+      
+      let contextContainsKey = context
+        .contains(where: { $0.key == macro.key })
+      
+      if let val = contextContainsKey
+          ? context[macro.key]
+          : macro.defaultValue
+      {
+        text = text.replacingFirstOccurrence(
+          of: match,
+          with: val as String)
+      }
+    }
+    
     return text
   }
 }
@@ -105,10 +175,45 @@ extension URL {
       MarkdownParser.shared.parse(try rawContents).metadata
     }
   }
+  
+  var dependencies: [File] {
+    get throws {
+      guard isRenderable else {
+        return []
+      }
+      
+      var deps: [File?] = []
+      
+      for match in try contents.find(Include.pattern) {
+        deps.append(Include(fragment: match).file)
+      }
+      
+      if let ref = try context["#layout"] {
+        deps.append(Project.file(ref))
+      }
+      
+      return try deps
+        .filter { $0 != nil && $0!.source.exists == true }
+        .map { $0! }
+        .flatMap { try [$0] + $0.source.dependencies }
+        .map { $0.source }
+        .unique
+        .map { File(source: $0) }
+    }
+  }
 
   var isRenderable: Bool {
     ["css", "htm", "html", "js", "md", "rss", "svg", "txt", "xml"]
       .contains(pathExtension)
+  }
+  
+  var modificationDate: Date? {
+    get throws {
+      let attributes = try FileManager.default
+        .attributesOfItem(atPath: path(percentEncoded: false))
+      
+      return attributes[FileAttributeKey.modificationDate] as? Date
+    }
   }
   
   var rawContents: String {
