@@ -37,18 +37,3 @@ class Watcher {
     log("[watch] watching \(Project.source!.masked) for changes")
   }
 }
-
-extension Array where Element: Hashable {
-  var unique: [Element] {
-    Array(Set(self))
-  }
-}
-
-extension URL {
-  init(bufferPath: UnsafePointer<Int8>) {
-    self = URL(
-      fileURLWithFileSystemRepresentation: bufferPath,
-      isDirectory: false,
-      relativeTo: nil)
-  }
-}
