@@ -19,12 +19,33 @@ struct CLI: ParsableCommand {
   var port: UInt16?
   
   mutating func run() throws {
-    if target == "<source>/_build" { target = "\(source)/_build" }
+    if target == "<source>/_build" {
+      target = "\(source)/_build"
+    }
     
-    log("TODO: build project")
+    Project.source = URL(
+      string: source.asRef,
+      relativeTo: URL.currentDirectory())
+    
+    Project.target = URL(
+      string: target.asRef,
+      relativeTo: URL.currentDirectory())
+    
+    guard Project.source!.exists else {
+      throw ValidationError("<source> does not exist.")
+    }
+    
+    guard Project.source!.masked != Project.target!.masked else {
+      throw ValidationError("<source> and <target> cannot be the same directory.")
+    }
+    
+    Project.build()
     
     if let port = port {
-      log("TODO: run watcher and server on port \(port)")
+//      Watcher(Project.source!)
+//      Server(path: Project.target!.masked, port: port)
+      log("^c to stop")
+      RunLoop.current.run()
     }
   }
 }
